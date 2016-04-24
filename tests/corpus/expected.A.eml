@@ -1,5 +1,4 @@
-Content-Type: multipart/signed; protocol="application/pgp-signature";
- micalg="pgp-sha256"; boundary="cccccccccccc"
+Content-Type: multipart/signed; protocol="application/pgp-signature"; micalg="pgp-sha256"; boundary="cccccccccccc"
 MIME-Version: 1.0
 Date: Thu, 16 Jul 2015 11:44:44 +0200
 Subject: alternative text/html message with embedded header, signed
