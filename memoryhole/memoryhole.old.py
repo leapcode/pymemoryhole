@@ -227,7 +227,7 @@ if __name__ == "__main__":
     if os.environ.get('DEBUG'):
         logging.basicConfig(level=logging.DEBUG)
     if len(sys.argv) != 3:
-        print "Usage: memoryhole mail_path key_path"
+        print("Usage: memoryhole mail_path key_path")
         sys.exit()
     msg_path = sys.argv[1]
     key_path = sys.argv[2]
