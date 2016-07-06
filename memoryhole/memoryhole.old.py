@@ -192,7 +192,6 @@ def _boundary_factory(start):
     return _gen_boundary
 
 
-
 def _wrap_with_header(msg, boundary=None):
     body = email.message.Message()
     body.set_payload(msg.get_payload())
@@ -243,9 +242,9 @@ if __name__ == "__main__":
         key_data = key_f.read()
         gpg.import_keys(key_data)
 
-    #if not gpg.list_keys():
-        #key_input = gpg.gen_key_input(key_length=1024, key_type='RSA')
-        #gpg.gen_key(key_input)
+    # if not gpg.list_keys():
+        # key_input = gpg.gen_key_input(key_length=1024, key_type='RSA')
+        # gpg.gen_key(key_input)
 
     with open(msg_path) as f:
         basetext = f.read()

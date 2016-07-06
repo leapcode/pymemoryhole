@@ -8,5 +8,4 @@ setup(name='memoryhole',
       author='Kali Kaneko',
       author_email='kali@leap.se',
       url='https://leap.se',
-      packages=['memoryhole'],
-     )
+      packages=['memoryhole'])
