@@ -9,8 +9,13 @@ class Gnupg(object):
         from gnupg import GPG
         self.gpg = GPG()
 
-    def encrypt(self, data, encraddr, signaddr):
-        result = self.gpg.encrypt(data, *encraddr, default_key=signaddr)
+    def encrypt(self, data, encraddr):
+        result = self.gpg.encrypt(data, *encraddr)
+        self._check_gpg_error(result)
+        return result.data
+
+    def sign(self, data):
+        result = self.gpg.sign(data)
         self._check_gpg_error(result)
         return result.data
 
@@ -23,4 +28,4 @@ class Gnupg(object):
     def _check_gpg_error(self, result):
         stderr = getattr(result, 'stderr', '')
         if getattr(result, 'ok', False) is not True:
-            raise RuntimeError('Failed to encrypt/decrypt: %s' % stderr)
+            raise RuntimeError('Failed gnupg operation: %s' % stderr)

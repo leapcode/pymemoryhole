@@ -1,8 +1,17 @@
+import re
+
+try:
+        from StringIO import StringIO
+except ImportError:
+        from io import StringIO
 from email.mime.application import MIMEApplication
-from email.utils import getaddresses, parseaddr
+from email.utils import getaddresses
 
 from memoryhole.gpg import Gnupg
-from memoryhole.rfc3156 import PGPEncrypted, MultipartEncrypted
+from memoryhole.rfc3156 import (
+    PGPEncrypted, MultipartEncrypted, RFC3156CompliantGenerator,
+    MultipartSigned, PGPSignature, encode_base64_rec
+)
 
 
 class ProtectConfig(object):
@@ -47,20 +56,18 @@ def protect(msg, encrypt=True, config=None):
     if encrypt:
         return _encrypt_mime(msg, config)
 
-    raise NotImplementedError()
+    return _sign_mime(msg, config)
 
 
 def _encrypt_mime(msg, config):
     encraddr = _recipient_addresses(msg)
-    signaddr = _from_address(msg)
 
     newmsg = MultipartEncrypted('application/pgp-encrypted')
     for hkey, hval in msg.items():
         newmsg.add_header(hkey, hval)
         del(msg[hkey])
 
-    encstr = config.openpgp.encrypt(msg.as_string(unixfrom=False),
-                                    encraddr, signaddr)
+    encstr = config.openpgp.encrypt(msg.as_string(unixfrom=False), encraddr)
     encmsg = MIMEApplication(
         encstr, _subtype='octet-stream', _encoder=lambda x: x)
     encmsg.add_header('content-disposition', 'attachment',
@@ -75,13 +82,33 @@ def _encrypt_mime(msg, config):
     return newmsg
 
 
+def _sign_mime(msg, config):
+    newmsg = MultipartSigned('application/pgp-signature', 'pgp-sha512')
+    for hkey, hval in msg.items():
+        newmsg.add_header(hkey, hval)
+        del(msg[hkey])
+
+    # apply base64 content-transfer-encoding
+    encode_base64_rec(msg)
+    # get message text with headers and replace \n for \r\n
+    fp = StringIO()
+    g = RFC3156CompliantGenerator(fp, mangle_from_=False, maxheaderlen=76)
+    g.flatten(msg)
+    msgtext = re.sub('\r?\n', '\r\n', fp.getvalue())
+    # make sure signed message ends with \r\n as per OpenPGP stantard.
+    if msg.is_multipart() and not msgtext.endswith("\r\n"):
+        msgtext += "\r\n"
+
+    signature = config.openpgp.sign(msgtext)
+    sigmsg = PGPSignature(signature)
+    # attach original message and signature to new message
+    newmsg.attach(msg)
+    newmsg.attach(sigmsg)
+    return newmsg
+
+
 def _recipient_addresses(msg):
     recipients = []
     for header in ('to', 'cc', 'bcc'):
         recipients += msg.get_all(header, [])
     return [r[1] for r in getaddresses(recipients)]
-
-
-def _from_address(msg):
-    frm = msg.get_all('From', [])
-    return parseaddr(frm)[1]

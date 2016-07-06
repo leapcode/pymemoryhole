@@ -2,7 +2,7 @@ from zope.interface import Interface
 
 
 class IOpenPGP(Interface):
-    def encrypt(data, encraddr, singaddr):
+    def encrypt(data, encraddr):
         """
         Encrypt and sign data.
 
@@ -14,6 +14,18 @@ class IOpenPGP(Interface):
         :type singaddr: str
 
         :return: encrypted and signed data
+        :rtype: str
+        """
+        pass
+
+    def sign(data):
+        """
+        Sign data.
+
+        :param data: data to be encrypted
+        :type data: str
+
+        :return: signature
         :rtype: str
         """
         pass
