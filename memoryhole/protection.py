@@ -1,10 +1,28 @@
 from email.mime.application import MIMEApplication
+from email.utils import getaddresses, parseaddr
 
 from memoryhole.gpg import Gnupg
 from memoryhole.rfc3156 import PGPEncrypted, MultipartEncrypted
 
 
 def protect(msg, openpgp=Gnupg(), encrypt=True, obscure=True):
+    """
+    Protect an email with memory hole. It will protect the PROTECTED_HEADERS
+    and if obscure=True will obscure the OBSCURED_HEADERS
+
+    :param msg: the email to be protected
+    :type msg: Message
+    :param openpgp: the implementation of openpgp to use for encryption and/or
+                    signature
+    :type openpgp: OpenPGP
+    :param encrypt: should the message be encrypted
+    :type encrypt: bool
+    :param obscure: should the headers be obscured
+    :type obsucre: bool
+
+    :return: an encrypted and/or signed email
+    :rtype: Message
+    """
     if encrypt:
         return _encrypt_mime(msg, openpgp)
 
