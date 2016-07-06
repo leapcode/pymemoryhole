@@ -2,7 +2,7 @@ import unittest
 from email.parser import Parser
 from zope.interface import implementer
 
-from memoryhole import protect, OpenPGP
+from memoryhole import protect, ProtectConfig, IOpenPGP
 
 
 FROM = "me@domain.com"
@@ -27,7 +27,8 @@ class ProtectTest(unittest.TestCase):
         p = Parser()
         msg = p.parsestr(EMAIL)
         encrypter = Encrypter()
-        encmsg = protect(msg, encrypter)
+        conf = ProtectConfig(openpgp=encrypter)
+        encmsg = protect(msg, config=conf)
 
         self.assertEqual(encmsg.get_payload(1).get_payload(), encrypter.encstr)
         self.assertEqual(BODY, encrypter.data[1:-1])  # remove '\n'
@@ -39,14 +40,15 @@ class ProtectTest(unittest.TestCase):
         p = Parser()
         msg = p.parsestr(EMAIL)
         encrypter = Encrypter()
-        encmsg = protect(msg, encrypter, obscure=False)
+        conf = ProtectConfig(openpgp=encrypter, obscured_headers=[])
+        encmsg = protect(msg, config=conf)
 
         self.assertEqual(encmsg['from'], FROM)
         self.assertEqual(encmsg['to'], TO)
         self.assertEqual(encmsg['subject'], SUBJECT)
 
 
-@implementer(OpenPGP)
+@implementer(IOpenPGP)
 class Encrypter(object):
     encstr = "this is encrypted"
 

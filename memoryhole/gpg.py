@@ -1,9 +1,9 @@
 from zope.interface import implementer
 
-from memoryhole.openpgp import OpenPGP
+from memoryhole.openpgp import IOpenPGP
 
 
-@implementer(OpenPGP)
+@implementer(IOpenPGP)
 class Gnupg(object):
     def __init__(self):
         from gnupg import GPG
@@ -11,7 +11,7 @@ class Gnupg(object):
 
     def encrypt(self, data, encraddr, signaddr):
         result = self.gpg.encrypt(data, *encraddr, default_key=signaddr)
-        self._assert_gpg_result_ok(result)
+        self._check_gpg_error(result)
         return result.data
 
     def decrypt(self, data):
@@ -20,7 +20,7 @@ class Gnupg(object):
     def verify(self, data, signature):
         pass
 
-    def _assert_gpg_result_ok(self, result):
+    def _check_gpg_error(self, result):
         stderr = getattr(result, 'stderr', '')
         if getattr(result, 'ok', False) is not True:
             raise RuntimeError('Failed to encrypt/decrypt: %s' % stderr)

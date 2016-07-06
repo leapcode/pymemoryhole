@@ -1,7 +1,7 @@
 from zope.interface import Interface
 
 
-class OpenPGP(Interface):
+class IOpenPGP(Interface):
     def encrypt(data, encraddr, singaddr):
         """
         Encrypt and sign data.

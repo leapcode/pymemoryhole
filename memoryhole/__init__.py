@@ -1,10 +1,6 @@
-from memoryhole.protection import protect
-from memoryhole.openpgp import OpenPGP
+from memoryhole.protection import protect, ProtectConfig
+from memoryhole.openpgp import IOpenPGP
 from memoryhole.gpg import Gnupg
-
-
-PROTECTED_HEADERS = ('Subject', 'Message-ID', 'Date', 'To', 'From')
-OBSCURED_HEADERS = ('Subject', 'Message-ID', 'Date', 'To', 'From')
 
 
 def unwrap(msg, opengp=Gnupg()):
@@ -17,10 +13,10 @@ def unwrap(msg, opengp=Gnupg()):
                     verification
     :type openpgp: OpenPGP
 
-    :return: a dencrypted email
+    :return: a decrypted email
     :rtype: Message
     """
     raise NotImplementedError()
 
 
-__all__ = ["protect", "unwrap", "OpenPGP"]
+__all__ = ["protect", "ProtectConfig", "unwrap", "IOpenPGP"]
