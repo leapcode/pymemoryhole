@@ -30,13 +30,14 @@ def protect(msg, openpgp=Gnupg(), encrypt=True, obscure=True):
 
 
 def _encrypt_mime(msg, openpgp):
+    encraddr = _recipient_addresses(msg)
+    signaddr = _from_address(msg)
+
     newmsg = MultipartEncrypted('application/pgp-encrypted')
     for hkey, hval in msg.items():
         newmsg.add_header(hkey, hval)
         del(msg[hkey])
 
-    encraddr = ""  # TODO
-    signaddr = ""  # TODO
     encstr = openpgp.encrypt(msg.as_string(unixfrom=False),
                              encraddr, signaddr)
     encmsg = MIMEApplication(
@@ -51,3 +52,15 @@ def _encrypt_mime(msg, openpgp):
     newmsg.attach(metamsg)
     newmsg.attach(encmsg)
     return newmsg
+
+
+def _recipient_addresses(msg):
+    recipients = []
+    for header in ('to', 'cc', 'bcc'):
+        recipients += msg.get_all(header, [])
+    return [r[1] for r in getaddresses(recipients)]
+
+
+def _from_address(msg):
+    frm = msg.get_all('From', [])
+    return parseaddr(frm)[1]

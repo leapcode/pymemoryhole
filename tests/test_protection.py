@@ -1,4 +1,3 @@
-import base64
 import unittest
 from email.parser import Parser
 from zope.interface import implementer
@@ -32,7 +31,19 @@ class ProtectTest(unittest.TestCase):
 
         self.assertEqual(encmsg.get_payload(1).get_payload(), encrypter.encstr)
         self.assertEqual(BODY, encrypter.data[1:-1])  # remove '\n'
+        self.assertEqual([TO], encrypter.encraddr)
+        self.assertEqual(FROM, encrypter.singaddr)
         self.assertEqual(encmsg.get_content_type(), "multipart/encrypted")
+
+    def test_unobscured_headers(self):
+        p = Parser()
+        msg = p.parsestr(EMAIL)
+        encrypter = Encrypter()
+        encmsg = protect(msg, encrypter, obscure=False)
+
+        self.assertEqual(encmsg['from'], FROM)
+        self.assertEqual(encmsg['to'], TO)
+        self.assertEqual(encmsg['subject'], SUBJECT)
 
 
 @implementer(OpenPGP)
@@ -41,6 +52,8 @@ class Encrypter(object):
 
     def encrypt(self, data, encraddr, singaddr):
         self.data = data
+        self.encraddr = encraddr
+        self.singaddr = singaddr
         return self.encstr
 
 
