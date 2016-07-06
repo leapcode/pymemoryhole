@@ -33,7 +33,7 @@ class ProtectTest(unittest.TestCase):
         encmsg = protect(msg, config=conf)
 
         self.assertEqual(encmsg.get_payload(1).get_payload(), encrypter.encstr)
-        self.assertEqual(BODY, encrypter.data[1:-1])  # remove '\n'
+        self._assert_body(encrypter.data, BODY+'\n')
         self.assertEqual([TO], encrypter.encraddr)
         self.assertEqual(encmsg.get_content_type(), "multipart/encrypted")
 
@@ -58,9 +58,7 @@ class ProtectTest(unittest.TestCase):
         b64body = b64encode(six.b(BODY+'\n'))
         self.assertEqual(six.b(encmsg.get_payload(0).get_payload()), b64body)
         self.assertEqual(encmsg.get_payload(1).get_payload(), signer.signature)
-        self.assertEqual(
-            six.b("Content-Transfer-Encoding: base64\r\n\r\n")+b64body,
-            six.b(signer.data))
+        self._assert_body(signer.data, b64body.decode('utf-8'))
         self.assertEqual(encmsg.get_content_type(), "multipart/signed")
 
     def test_signed_headers(self):
@@ -68,11 +66,21 @@ class ProtectTest(unittest.TestCase):
         msg = p.parsestr(EMAIL)
         signer = Signer()
         conf = ProtectConfig(openpgp=signer)
-        encmsg = protect(msg, encrypt=False, config=conf)
+        signmsg = protect(msg, encrypt=False, config=conf)
 
-        self.assertEqual(encmsg['from'], FROM)
-        self.assertEqual(encmsg['to'], TO)
-        self.assertEqual(encmsg['subject'], SUBJECT)
+        self.assertEqual(signmsg['from'], FROM)
+        self.assertEqual(signmsg['to'], TO)
+        self.assertEqual(signmsg['subject'], SUBJECT)
+
+        signedpart = signmsg.get_payload(0)
+        self.assertEqual(signedpart['from'], FROM)
+        self.assertEqual(signedpart['to'], TO)
+        self.assertEqual(signedpart['subject'], SUBJECT)
+
+    def _assert_body(self, data, body):
+        p = Parser()
+        msg = p.parsestr(data)
+        self.assertEqual(msg.get_payload(), body)
 
 
 @implementer(IOpenPGP)

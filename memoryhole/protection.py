@@ -6,6 +6,7 @@ except ImportError:
         from io import StringIO
 from email.mime.application import MIMEApplication
 from email.utils import getaddresses
+from copy import deepcopy
 
 from memoryhole.gpg import Gnupg
 from memoryhole.rfc3156 import (
@@ -16,8 +17,8 @@ from memoryhole.rfc3156 import (
 
 class ProtectConfig(object):
 
-    PROTECTED_HEADERS = ('Subject', 'Message-ID', 'Date', 'To', 'From')
-    OBSCURED_HEADERS = ('Subject', 'Message-ID', 'Date', 'To', 'From')
+    PROTECTED_HEADERS = ('subject', 'message-id', 'date', 'to', 'from')
+    OBSCURED_HEADERS = ('subject', 'message-id', 'date', 'to', 'from')
 
     def __init__(self, openpgp=None, protected_headers=PROTECTED_HEADERS,
                  obscured_headers=OBSCURED_HEADERS):
@@ -35,6 +36,9 @@ class ProtectConfig(object):
         if openpgp is None:
             openpgp = Gnupg()
         self.openpgp = openpgp
+
+        self.protected_headers = protected_headers
+        self.obscured_headers = obscured_headers
 
 
 def protect(msg, encrypt=True, config=None):
@@ -62,12 +66,10 @@ def protect(msg, encrypt=True, config=None):
 def _encrypt_mime(msg, config):
     encraddr = _recipient_addresses(msg)
 
-    newmsg = MultipartEncrypted('application/pgp-encrypted')
-    for hkey, hval in msg.items():
-        newmsg.add_header(hkey, hval)
-        del(msg[hkey])
+    newmsg, part = _fix_headers(
+        msg, MultipartEncrypted('application/pgp-encrypted'), config)
 
-    encstr = config.openpgp.encrypt(msg.as_string(unixfrom=False), encraddr)
+    encstr = config.openpgp.encrypt(part.as_string(unixfrom=False), encraddr)
     encmsg = MIMEApplication(
         encstr, _subtype='octet-stream', _encoder=lambda x: x)
     encmsg.add_header('content-disposition', 'attachment',
@@ -83,17 +85,16 @@ def _encrypt_mime(msg, config):
 
 
 def _sign_mime(msg, config):
-    newmsg = MultipartSigned('application/pgp-signature', 'pgp-sha512')
-    for hkey, hval in msg.items():
-        newmsg.add_header(hkey, hval)
-        del(msg[hkey])
+    newmsg, part = _fix_headers(
+        msg, MultipartSigned('application/pgp-signature', 'pgp-sha512'),
+        config)
 
     # apply base64 content-transfer-encoding
-    encode_base64_rec(msg)
+    encode_base64_rec(part)
     # get message text with headers and replace \n for \r\n
     fp = StringIO()
     g = RFC3156CompliantGenerator(fp, mangle_from_=False, maxheaderlen=76)
-    g.flatten(msg)
+    g.flatten(part)
     msgtext = re.sub('\r?\n', '\r\n', fp.getvalue())
     # make sure signed message ends with \r\n as per OpenPGP stantard.
     if msg.is_multipart() and not msgtext.endswith("\r\n"):
@@ -101,10 +102,26 @@ def _sign_mime(msg, config):
 
     signature = config.openpgp.sign(msgtext)
     sigmsg = PGPSignature(signature)
+
     # attach original message and signature to new message
-    newmsg.attach(msg)
+    newmsg.attach(part)
     newmsg.attach(sigmsg)
     return newmsg
+
+
+def _fix_headers(oldmsg, newmsg, config):
+    part = deepcopy(oldmsg)
+    for hkey, hval in part.items():
+        newmsg.add_header(hkey, hval)
+        del(part[hkey])
+    _protect_headers(newmsg, part, config.protected_headers)
+    return newmsg, part
+
+
+def _protect_headers(orig, dest, headers):
+    for header in headers:
+        if header in orig:
+            dest.add_header(header, orig[header])
 
 
 def _recipient_addresses(msg):
