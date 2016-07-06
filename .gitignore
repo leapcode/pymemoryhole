@@ -63,3 +63,5 @@ target/
 # swapfiles
 *.swp
 *.swo
+
+gnupghome
