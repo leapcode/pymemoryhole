@@ -15,31 +15,6 @@ logger = logging.getLogger(__name__)
 COPY_HEADERS = ('Subject', 'Message-ID', 'Date', 'To', 'From')
 
 
-class ProtectionLevel(object):
-
-    def __init__(self, signed_by, encrypted_by):
-
-        self.signed_by = signed_by
-        self.encrypted_by = encrypted_by
-
-    # TODO add __cmp__
-
-    @property
-    def score(self):
-        if self.signed_by and self.encrypted_by:
-            return 3
-        elif self.signed_by:
-            return 2
-        elif self.encrypted_by:
-            return 1
-        else:
-            return 0
-
-    def __repr__(self):
-        return '<ProtectionLevel: sig(%s) encr(%s) score:%s>' % (
-            len(self.signed_by), len(self.encrypted_by), self.score)
-
-
 class MemoryHoleHeader(Header):
 
     def __init__(self, name, value):
