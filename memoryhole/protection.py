@@ -5,6 +5,8 @@ try:
 except ImportError:
         from io import StringIO
 from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.utils import getaddresses
 from copy import deepcopy
 
@@ -18,7 +20,11 @@ from memoryhole.rfc3156 import (
 class ProtectConfig(object):
 
     PROTECTED_HEADERS = ('subject', 'message-id', 'date', 'to', 'from')
-    OBSCURED_HEADERS = ('subject', 'message-id', 'date', 'to', 'from')
+    OBSCURED_HEADERS = {
+        'subject': 'encrypted email',
+        'message-id': 'C@memoryhole.example',
+        'date': 'Thu, 1 Jan 1970 00:00:00 +0000',
+    }
 
     def __init__(self, openpgp=None, protected_headers=PROTECTED_HEADERS,
                  obscured_headers=OBSCURED_HEADERS):
@@ -28,10 +34,13 @@ class ProtectConfig(object):
         :param openpgp: the implementation of openpgp to use for encryption
                         and/or signature
         :type openpgp: IOpenPGP
-        :param protected_headers: list of headers to protect
+        :param protected_headers: list of headers to protect in the signed
+                                  part, they need to be in lower case
         :type protected_headers: [str]
-        :param obscured_headers: list of headers to obscure
-        :type obscured_headers: [str]
+        :param obscured_headers: list of headers to obscure replacing it by
+                                 a predefined value in the email headers,
+                                 the headers need to be in lower case
+        :type obscured_headers: {str: str}
         """
         if openpgp is None:
             openpgp = Gnupg()
@@ -43,8 +52,8 @@ class ProtectConfig(object):
 
 def protect(msg, encrypt=True, config=None):
     """
-    Protect an email with memory hole. It will protect the PROTECTED_HEADERS
-    and if obscure=True will obscure the OBSCURED_HEADERS
+    Protect an email with memory hole. It will protect the
+    config.protected_headers and will obscure the config.obscured_headers
 
     :param msg: the email to be protected
     :type msg: Message
@@ -66,8 +75,10 @@ def protect(msg, encrypt=True, config=None):
 def _encrypt_mime(msg, config):
     encraddr = _recipient_addresses(msg)
 
-    newmsg, part = _fix_headers(
+    newmsg, part = _protect_headers(
         msg, MultipartEncrypted('application/pgp-encrypted'), config)
+    if config.obscured_headers:
+        newmsg, part = _obscure_headers(newmsg, part, config)
 
     encstr = config.openpgp.encrypt(part.as_string(unixfrom=False), encraddr)
     encmsg = MIMEApplication(
@@ -85,7 +96,7 @@ def _encrypt_mime(msg, config):
 
 
 def _sign_mime(msg, config):
-    newmsg, part = _fix_headers(
+    newmsg, part = _protect_headers(
         msg, MultipartSigned('application/pgp-signature', 'pgp-sha512'),
         config)
 
@@ -109,19 +120,30 @@ def _sign_mime(msg, config):
     return newmsg
 
 
-def _fix_headers(oldmsg, newmsg, config):
+def _obscure_headers(msg, part, config):
+    headers = ""
+    for header, value in msg.items():
+        if header.lower() in config.obscured_headers:
+            headers += header + ": " + value + "\n"
+    headerspart = MIMEText(headers, 'rfc822-headers')
+    # TODO: should this be an attachment????
+    newpart = MIMEMultipart('mixed', _subparts=[headerspart, part])
+
+    for header, value in config.obscured_headers.items():
+        if header in msg:
+            del(msg[header])
+            if value:
+                msg.add_header(header, value)
+    return msg, newpart
+
+
+def _protect_headers(oldmsg, newmsg, config):
     part = deepcopy(oldmsg)
-    for hkey, hval in part.items():
-        newmsg.add_header(hkey, hval)
-        del(part[hkey])
-    _protect_headers(newmsg, part, config.protected_headers)
+    for header, value in part.items():
+        newmsg.add_header(header, value)
+        if header.lower() not in config.protected_headers:
+            del(part[header])
     return newmsg, part
-
-
-def _protect_headers(orig, dest, headers):
-    for header in headers:
-        if header in orig:
-            dest.add_header(header, orig[header])
 
 
 def _recipient_addresses(msg):

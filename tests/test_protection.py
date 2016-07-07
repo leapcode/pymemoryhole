@@ -29,7 +29,7 @@ class ProtectTest(unittest.TestCase):
         p = Parser()
         msg = p.parsestr(EMAIL)
         encrypter = Encrypter()
-        conf = ProtectConfig(openpgp=encrypter)
+        conf = ProtectConfig(openpgp=encrypter, obscured_headers=[])
         encmsg = protect(msg, config=conf)
 
         self.assertEqual(encmsg.get_payload(1).get_payload(), encrypter.encstr)
@@ -47,6 +47,27 @@ class ProtectTest(unittest.TestCase):
         self.assertEqual(encmsg['from'], FROM)
         self.assertEqual(encmsg['to'], TO)
         self.assertEqual(encmsg['subject'], SUBJECT)
+
+    def test_obscured_headers(self):
+        p = Parser()
+        msg = p.parsestr(EMAIL)
+        encrypter = Encrypter()
+        conf = ProtectConfig(openpgp=encrypter)
+        encmsg = protect(msg, config=conf)
+
+        for header, value in conf.obscured_headers.items():
+            msgheaders = encmsg.get_all(header, [])
+            if msgheaders:
+                self.assertEqual(msgheaders, [value])
+
+        encpart = p.parsestr(encrypter.data)
+        self.assertEqual(encpart.get_content_type(), "multipart/mixed")
+        rfc822part = encpart.get_payload(0)
+        self.assertEqual(rfc822part.get_content_type(), "text/rfc822-headers")
+        rfc822body = "Subject: %s\n" % (SUBJECT,)
+        self.assertEqual(rfc822part.get_payload(), rfc822body)
+        self.assertEqual(encpart.get_payload(1).get_payload(),
+                         BODY+'\n')
 
     def test_pgp_signed_mime(self):
         p = Parser()
