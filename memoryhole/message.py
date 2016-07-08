@@ -1,124 +1,92 @@
+from collections import namedtuple
 from email.message import Message
-from email.header import Header
+from email.parser import Parser
 
 
-class ProtectionLevel(object):
-
-    def __init__(self, signed_by=None, encrypted_by=None):
-        if signed_by is None:
-            signed_by = set([])
-        self.signed_by = signed_by
-
-        if encrypted_by is None:
-            encrypted_by = set([])
-        self.encrypted_by = encrypted_by
-
-    @property
-    def score(self):
-        if self.signed_by and self.encrypted_by:
-            return 3
-        elif self.signed_by:
-            return 2
-        elif self.encrypted_by:
-            return 1
-        else:
-            return 0
-
-    def __cmp__(self, other):
-        try:
-            return cmp(self.score, other.score)
-        except AttributeError:
-            raise TypeError('Tried to compare something that is '
-                            'not a ProtectionLevel')
-
-    def __eq__(self, other):
-        try:
-            return (not self.score < other.score and
-                    not other.score < self.score)
-        except AttributeError:
-            raise TypeError('Not a ProtectionLevel')
-
-    def __ne__(self, other):
-        try:
-            return (self.score < other.score or
-                    other.score < self.score)
-        except AttributeError:
-            raise TypeError('Not a ProtectionLevel')
-
-    def __gt__(self, other):
-        try:
-            return other.score < self.score
-        except AttributeError:
-            raise TypeError('Not a ProtectionLevel')
-
-    def __ge__(self, other):
-        try:
-            return not self.score < other.score
-        except AttributeError:
-            raise TypeError('Not a ProtectionLevel')
-
-    def __le__(self, other):
-        try:
-            return not other.score < self.score
-        except AttributeError:
-            raise TypeError('Not a ProtectionLevel')
-
-    def __repr__(self):
-        return '<ProtectionLevel: sig(%s) encr(%s) score:%s>' % (
-            len(self.signed_by), len(self.encrypted_by), self.score)
-
-
-class MemoryHoleHeader(Header):
-
-    def __init__(self, name, value):
-        self._name = name
-        self._value = value
-
-        self._h = Header(value, header_name=name)
-
-        self.signed_by = set([])
-        self.encrypted_by = set([])
-
-        self._firstlinelen = self._h._firstlinelen
-        self._chunks = self._h._chunks
-        self._continuation_ws = self._h._continuation_ws
-        self._charset = self._h._charset
-
-    @property
-    def protection_level(self):
-        return ProtectionLevel(self.signed_by, self.encrypted_by)
-
-    def __repr__(self):
-        return '<MemoryHoleHeader(%s) [%s: %s]>' % (
-            self.protection_level.score, self._name, self._value)
+HeaderReplacement = namedtuple("HeaderReplacement",
+                               ("force_display", "orig_value"))
 
 
 class MemoryHoleMessage(Message):
 
-    def __init__(self, msg, gpg):
-        self._msg = msg
-        self._gpg = gpg
+    @property
+    def signed(self):
+        return getattr(self, '_signed', set())
 
-        verified = False
-        # verified = verify_signature(msg, gpg)
-        self.signed = verified.valid
+    @property
+    def encrypted(self):
+        return getattr(self, '_encrypted', set())
 
-        self._mh_headers = {}
-        # inner_headers = extract_wrapped_headers(msg)
-        inner_headers = {}
+    @property
+    def body_part(self):
+        return getattr(self, '_body_part', None)
 
-        for name, value in inner_headers.items():
-            mhh = MemoryHoleHeader(name, value)
-            mhh.signed_by.add(verified.key_id)
-            self._mh_headers[name] = mhh
+    @property
+    def headers_signed(self):
+        return self._body_part.signed
 
-        self._charset = self._msg._charset
-        self._headers = self._msg._headers
-        self._payload = self._msg._payload
-        self.preamble = self._msg.preamble
+    @property
+    def headers_encrypted(self):
+        return self._body_part.encrypted
 
-    def get_protected_header(self, header_name):
-        return self._mh_headers.get(header_name)
+    def is_header_signed(self, header_name):
+        return header_name.lower() in self._mh_headers
 
-    # TODO add is_tampered_header?
-    # TODO add __getattr__, lookup the protected headers first
+    def header_replacement(self, header_name):
+        return self._mh_headers.get(header_name.lower())
+
+    def append_signed(self, fingerprint):
+        self._signed.add(fingerprint)
+
+    def append_encrypted(self, fingerprint):
+        self._encrypted.add(fingerprint)
+
+    def set_body_part(self, part):
+        self._body_part = part
+
+    def add_protected_header(self, name, value, force_display=False):
+        if not self._body_part:
+            raise MalformedMessage("Couldn't find a body in the message")
+
+        name = name.lower()
+
+        if name in self._mh_headers:
+            return
+
+        encrypted = self._body_part.encrypted
+        signed = self._body_part.signed
+
+        orig_value = None
+        if name in self:
+            orig_value = self[name]
+            self.replace_header(name, value)
+        else:
+            self.add_header(name, value)
+
+        # TODO: what about errors on date of minutes?
+        #       or subject with something added to it?
+        replacement = None
+        if encrypted and (not orig_value or value not in orig_value):
+            replacement = HeaderReplacement(force_display, orig_value)
+        self._mh_headers[name] = replacement
+
+
+def parsemsg(msgstr, signed=None, encrypted=None):
+    parser = Parser()
+    msg = parser.parsestr(msgstr)
+    return to_memoryhole(msg, signed, encrypted)
+
+
+def to_memoryhole(msg, signed=None, encrypted=None):
+    msg.__class__ = MemoryHoleMessage
+
+    msg._signed = set()
+    if signed is not None:
+        msg._signed = signed
+    msg._encrypted = set()
+    if encrypted is not None:
+        msg._encrypted = encrypted
+
+    msg._mh_headers = {}
+    msg._body_part = msg
+    return msg

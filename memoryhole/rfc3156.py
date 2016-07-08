@@ -29,19 +29,41 @@ except ImportError:
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email import errors
+from email.generator import Generator as EmailGenerator
 from email.generator import (
-    Generator,
     fcre,
     NL,
     _make_boundary,
 )
 
 
+class Generator(EmailGenerator):
+    """
+    Generates output from a Message object tree, keeping signatures.
+
+    This code was extracted from Mailman.Generator.Generator, version 2.1.4:
+
+    Most other Generator will be created not setting the foldheader flag,
+    as we do not overwrite clone(). The original clone() does not
+    set foldheaders.
+
+    So you need to set foldheaders if you want the toplevel to fold headers
+
+    TODO: Python 3.3 is patched against this problems. See issue 1590744 on
+          python bug tracker.
+    """
+    def _write_headers(self, msg):
+        for h, v in msg.items():
+            print >> self._fp, '%s:' % h,
+            print >> self._fp, v
+        print >> self._fp
+
+
 #
 # A generator that solves http://bugs.python.org/issue14983
 #
 
-class RFC3156CompliantGenerator(Generator):
+class RFC3156CompliantGenerator(EmailGenerator):
     """
     An email generator that addresses Python's issue #14983 for multipart
     messages.

@@ -1,0 +1,3 @@
+
+class MalformedMessage(Exception):
+    pass
