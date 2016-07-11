@@ -28,7 +28,7 @@ parser = Parser()
 def test_pgp_encrypted_mime():
     msg = parser.parsestr(EMAIL)
     encrypter = Encrypter()
-    conf = ProtectConfig(openpgp=encrypter, obscured_headers=[])
+    conf = ProtectConfig(openpgp=encrypter, replaced_headers=[])
     encmsg = protect(msg, config=conf)
 
     assert encmsg.get_payload(1).get_payload() == encrypter.encstr
@@ -37,10 +37,10 @@ def test_pgp_encrypted_mime():
     assert get_body(encrypter.data) == BODY + '\n'
 
 
-def test_unobscured_headers():
+def test_kept_headers():
     msg = parser.parsestr(EMAIL)
     encrypter = Encrypter()
-    conf = ProtectConfig(openpgp=encrypter, obscured_headers=[])
+    conf = ProtectConfig(openpgp=encrypter, replaced_headers=[])
     encmsg = protect(msg, config=conf)
 
     assert encmsg['from'] == FROM
@@ -48,16 +48,16 @@ def test_unobscured_headers():
     assert encmsg['subject'] == SUBJECT
 
 
-def test_obscured_headers():
+def test_replaced_headers():
     msg = parser.parsestr(EMAIL)
     encrypter = Encrypter()
     conf = ProtectConfig(openpgp=encrypter)
     encmsg = protect(msg, config=conf)
 
-    for header, value in conf.obscured_headers.items():
+    for header, value in conf.replaced_headers.items():
         msgheaders = encmsg.get_all(header, [])
         if msgheaders:
-            assert msgheaders == [value]
+            assert msgheaders == [value.replacement]
 
     encpart = parser.parsestr(encrypter.data)
     assert encpart.get_content_type() == "multipart/mixed"

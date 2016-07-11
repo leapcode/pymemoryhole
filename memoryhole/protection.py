@@ -8,6 +8,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import getaddresses
+from collections import namedtuple
 from copy import deepcopy
 
 from memoryhole.gpg import Gnupg
@@ -19,35 +20,47 @@ from memoryhole.rfc3156 import (
 
 class ProtectConfig(object):
 
-    PROTECTED_HEADERS = ('subject', 'message-id', 'date', 'to', 'from')
-    OBSCURED_HEADERS = {
-        'subject': 'encrypted email',
-        'message-id': 'C@memoryhole.example',
-        'date': 'Thu, 1 Jan 1970 00:00:00 +0000',
+    Replace = namedtuple("Replace", ("force_display", "replacement"))
+
+    REPLACED_HEADERS = {
+        "subject": Replace(True, "encrypted email"),
+        "message-id": Replace(True, "C@memoryhole.example"),
+        "date": Replace(True, "Thu, 1 Jan 1970 00:00:00 +0000"),
+        "in-reply-to": Replace(False, None),
+        "references": Replace(False, None),
+        "user-agent": Replace(False, None),
     }
 
-    def __init__(self, openpgp=None, protected_headers=PROTECTED_HEADERS,
-                 obscured_headers=OBSCURED_HEADERS):
+    def __init__(self, openpgp=None, replaced_headers=REPLACED_HEADERS,
+                 skipped_headers=[]):
         """
-        Configuration parameters for the protection
+        Configuration parameters for the protection.
+
+        Every header will be included in the memory hole protected headers part
+        unless is in the skipped_headers list.
+
+        For encrypted emails the header will be replaced if they are present in
+        the replaced_headers list. Each header will be putted in the MIMEpart
+        headers unless 'force_display' is True. Top level headers will be
+        replaced by 'replacement' unless 'replacement' is None, in which case
+        the header will be removed completely from the top level headers.
+
+        All header names need to be in lower case.
 
         :param openpgp: the implementation of openpgp to use for encryption
                         and/or signature
         :type openpgp: IOpenPGP
-        :param protected_headers: list of headers to protect in the signed
-                                  part, they need to be in lower case
-        :type protected_headers: [str]
-        :param obscured_headers: list of headers to obscure replacing it by
-                                 a predefined value in the email headers,
-                                 the headers need to be in lower case
-        :type obscured_headers: {str: str}
+        :param replaced_headers: a dict of headers to be replaced
+        :type replaced_headers: {str: Header}
+        :param skipped_headers: list of headers to skip
+        :type skipped_headers: [str]
         """
         if openpgp is None:
             openpgp = Gnupg()
         self.openpgp = openpgp
 
-        self.protected_headers = protected_headers
-        self.obscured_headers = obscured_headers
+        self.skipped_headers = skipped_headers
+        self.replaced_headers = replaced_headers
 
 
 def protect(msg, encrypt=True, config=None):
@@ -77,8 +90,8 @@ def _encrypt_mime(msg, config):
 
     newmsg, part = _protect_headers(
         msg, MultipartEncrypted('application/pgp-encrypted'), config)
-    if config.obscured_headers:
-        newmsg, part = _obscure_headers(newmsg, part, config)
+    if config.replaced_headers:
+        newmsg, part = _replace_headers(newmsg, part, config)
 
     encstr = config.openpgp.encrypt(part.as_string(unixfrom=False), encraddr)
     encmsg = MIMEApplication(
@@ -120,20 +133,22 @@ def _sign_mime(msg, config):
     return newmsg
 
 
-def _obscure_headers(msg, part, config):
+def _replace_headers(msg, part, config):
     headers = ""
     for header, value in msg.items():
-        if header.lower() in config.obscured_headers:
+        h = header.lower()
+        if (h in config.replaced_headers and
+                config.replaced_headers[h].force_display):
             headers += header + ": " + value + "\n"
     headerspart = MIMEText(headers, 'rfc822-headers')
     # TODO: should this be an attachment????
     newpart = MIMEMultipart('mixed', _subparts=[headerspart, part])
 
-    for header, value in config.obscured_headers.items():
+    for header, value in config.replaced_headers.items():
         if header in msg:
             del(msg[header])
-            if value:
-                msg.add_header(header, value)
+            if value.replacement is not None:
+                msg.add_header(header, value.replacement)
     return msg, newpart
 
 
@@ -141,7 +156,7 @@ def _protect_headers(oldmsg, newmsg, config):
     part = deepcopy(oldmsg)
     for header, value in part.items():
         newmsg.add_header(header, value)
-        if header.lower() not in config.protected_headers:
+        if header.lower() in config.skipped_headers:
             del(part[header])
     return newmsg, part
 
