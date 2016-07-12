@@ -31,13 +31,9 @@ class ProtectConfig(object):
         "user-agent": Replace(False, None),
     }
 
-    def __init__(self, openpgp=None, replaced_headers=REPLACED_HEADERS,
-                 skipped_headers=[]):
+    def __init__(self, openpgp=None, replaced_headers=REPLACED_HEADERS):
         """
         Configuration parameters for the protection.
-
-        Every header will be included in the memory hole protected headers part
-        unless is in the skipped_headers list.
 
         For encrypted emails the header will be replaced if they are present in
         the replaced_headers list. Each header will be putted in the MIMEpart
@@ -52,14 +48,11 @@ class ProtectConfig(object):
         :type openpgp: IOpenPGP
         :param replaced_headers: a dict of headers to be replaced
         :type replaced_headers: {str: Header}
-        :param skipped_headers: list of headers to skip
-        :type skipped_headers: [str]
         """
         if openpgp is None:
             openpgp = Gnupg()
         self.openpgp = openpgp
 
-        self.skipped_headers = skipped_headers
         self.replaced_headers = replaced_headers
 
 
@@ -156,8 +149,6 @@ def _protect_headers(oldmsg, newmsg, config):
     part = deepcopy(oldmsg)
     for header, value in part.items():
         newmsg.add_header(header, value)
-        if header.lower() in config.skipped_headers:
-            del(part[header])
     return newmsg, part
 
 
