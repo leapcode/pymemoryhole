@@ -134,7 +134,7 @@ def _replace_headers(msg, part, config):
                 config.replaced_headers[h].force_display):
             headers += header + ": " + value + "\n"
     headerspart = MIMEText(headers, 'rfc822-headers')
-    # TODO: should this be an attachment????
+    headerspart.set_param('protected-headers', 'v1')
     newpart = MIMEMultipart('mixed', _subparts=[headerspart, part])
 
     for header, value in config.replaced_headers.items():
@@ -147,6 +147,7 @@ def _replace_headers(msg, part, config):
 
 def _protect_headers(oldmsg, newmsg, config):
     part = deepcopy(oldmsg)
+    part.set_param('protected-headers', 'v1')
     for header, value in part.items():
         newmsg.add_header(header, value)
     return newmsg, part
